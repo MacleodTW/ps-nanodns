@@ -21,17 +21,17 @@ static const char *k_default_config =
     "\n"
     "[overrides]\n"
     // Playstation
-    "playstation=0.0.0.0\n"
-    "sonyentertainmentnetwork=0.0.0.0\n"
-    "ribob01=0.0.0.0\n"
-    "akamai=0.0.0.0\n"
+    "*playstation*=0.0.0.0\n"
+    "*sonyentertainmentnetwork*=0.0.0.0\n"
+    "*ribob01*=0.0.0.0\n"
+    "*akamai*=0.0.0.0\n"
     // Youtube
-    "youtube=0.0.0.0\n"
-    "ggpht=0.0.0.0\n"
-    "googlevideo=0.0.0.0\n"
-    "yt.be=0.0.0.0\n"
-    "ytimg.com=0.0.0.0\n"
-    "yt3.googleusercontent.com=0.0.0.0\n"
+    "*youtube*=0.0.0.0\n"
+    "*ggpht*=0.0.0.0\n"
+    "*googlevideo*=0.0.0.0\n"
+    "*yt.be*=0.0.0.0\n"
+    "*ytimg.com*=0.0.0.0\n"
+    "*yt3.googleusercontent.com*=0.0.0.0\n"
     "\n"
     "[exceptions]\n"
     "feature.api.playstation.com\n"
@@ -156,17 +156,17 @@ void config_apply_builtin_upstreams(app_config_t *cfg) {
 int config_apply_builtin_overrides(app_config_t *cfg) {
   cfg->rule_count = 0;
   // Playstation
-  if(config_add_rule(cfg, "playstation", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "sonyentertainmentnetwork", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "ribob01", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "akamai", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*playstation*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*sonyentertainmentnetwork*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*ribob01*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*akamai*", "0.0.0.0") != 0) return -1;
   // Youtube
-  if(config_add_rule(cfg, "youtube", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "ggpht", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "googlevideo", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "yt.be", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "ytimg.com", "0.0.0.0") != 0) return -1;
-  if(config_add_rule(cfg, "yt3.googleusercontent.com", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*youtube*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*ggpht*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*googlevideo*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*yt.be*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*ytimg.com*", "0.0.0.0") != 0) return -1;
+  if(config_add_rule(cfg, "*yt3.googleusercontent.com*", "0.0.0.0") != 0) return -1;
   return 0;
 }
 
