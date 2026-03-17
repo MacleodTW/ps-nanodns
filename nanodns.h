@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 
 #define APP_NAME "ps5-NanoDNS"
-#define APP_VERSION "0.1"
+#define APP_VERSION "1.1"
 #define APP_COPYRIGHT "(c) drakmor modified by macleod"
 
 #define DATA_DIR "/data/nanodns"
