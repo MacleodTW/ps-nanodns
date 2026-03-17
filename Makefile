@@ -1,27 +1,31 @@
 PS5_HOST ?= ps5
 PS5_PORT ?= 9021
 
-ifdef PS5_PAYLOAD_SDK
-    include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
-else
-    $(error PS5_PAYLOAD_SDK is undefined)
+ifndef PS5_PAYLOAD_SDK
+    PS5_PAYLOAD_SDK ?= /opt/ps5-payload-sdk
 endif
 
-ELF := nanodns.elf
+include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
+
+
+ELF := ps5-nanodns.elf
 ELF_DEBUG := $(ELF).debug
+
+SRCS := main.c dns.c web.c cfg.c utils.c
+OBJS := $(SRCS:.c=.o)
 
 CFLAGS := -Wall -Wextra -Werror -O2 -g -std=c11
 LDLIBS := -lSceNet
 
 all: $(ELF)
 
-$(ELF): main.c
+$(ELF): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 	cp $@ $(ELF_DEBUG)
 	$(STRIP) --strip-debug $@
 
 clean:
-	rm -f $(ELF) $(ELF_DEBUG)
+	rm -f $(ELF) $(ELF_DEBUG) $(OBJS)
 
 test: $(ELF)
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^
