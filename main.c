@@ -7,7 +7,11 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 
+#ifdef PS4_HOST
+#include <ps4/kernel.h>
+#else
 #include <ps5/kernel.h>
+#endif
 
 #define PRIVILEGED_AUTHID 0x4801000000000013L
 

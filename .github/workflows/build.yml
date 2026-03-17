@@ -29,21 +29,25 @@ jobs:
       run: |
         wget https://github.com/ps5-payload-dev/pacbrew-repo/releases/latest/download/ps5-payload-dev.tar.gz
         sudo tar xf ps5-payload-dev.tar.gz -C /
+        wget https://github.com/ps4-payload-dev/sdk/releases/latest/download/ps4-payload-sdk.zip
+        sudo unzip ps4-payload-sdk.zip -d /opt
 
     - name: Build Payload
       run: |
-        export PS5_PAYLOAD_SDK=/opt/ps5-payload-sdk
-        make
+        make PS_HOST=ps4
+        make clean
+        make PS_HOST=ps5
+        make clean
 
     - name: Upload Payload
       uses: actions/upload-artifact@v4
       with:
-        name: ps5-nanodns.elf
-        path: ps5-nanodns.elf
+        files: ps4-nanodns.elf ps5-nanodns.elf
         if-no-files-found: error
 
     - name: Upload release
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v2
       with: 
-        files: ps5-nanodns.elf
+        files: ps4-nanodns.elf ps5-nanodns.elf
+

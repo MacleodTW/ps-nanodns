@@ -1,20 +1,28 @@
-PS5_HOST ?= ps5
-PS5_PORT ?= 9021
+PS_HOST = ps5
+PS_PORT = 9021
 
-ifndef PS5_PAYLOAD_SDK
-    PS5_PAYLOAD_SDK ?= /opt/ps5-payload-sdk
+ifeq ($(PS_HOST),ps4)
+    PS4_HOST = $(PS_HOST)
+    PS4_PORT = $(PS_PORT)
+    export PS4_PAYLOAD_SDK = /opt/ps4-payload-sdk
+    include $(PS4_PAYLOAD_SDK)/toolchain/orbis.mk
+ELF := ps4-nanodns.elf
+CFLAGS := -DPS4_HOST
+else # PS5
+    PS5_HOST = $(PS_HOST)
+    PS5_PORT = $(PS_PORT)
+    export PS5_PAYLOAD_SDK = /opt/ps5-payload-sdk
+    include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
+ELF := ps5-nanodns.elf
+CFLAGS := -DPS5_HOST
 endif
 
-include $(PS5_PAYLOAD_SDK)/toolchain/prospero.mk
-
-
-ELF := ps5-nanodns.elf
 ELF_DEBUG := $(ELF).debug
 
-SRCS := main.c dns.c web.c cfg.c utils.c
+SRCS := main.c dns.c web.c cfg.c utils.c fnmatch.c
 OBJS := $(SRCS:.c=.o)
 
-CFLAGS := -Wall -Wextra -Werror -O2 -g -std=c11
+CFLAGS += -Wall -Werror -O2 -g -std=c11
 LDLIBS := -lSceNet
 
 all: $(ELF)
@@ -25,7 +33,10 @@ $(ELF): $(OBJS)
 	$(STRIP) --strip-debug $@
 
 clean:
-	rm -f $(ELF) $(ELF_DEBUG) $(OBJS)
+	rm -f $(ELF_DEBUG) $(OBJS) *.debug
+
+distclean: clean
+	rm -f *nanodns.elf
 
 test: $(ELF)
 	$(PS5_DEPLOY) -h $(PS5_HOST) -p $(PS5_PORT) $^

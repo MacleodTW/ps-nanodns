@@ -5,7 +5,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef PS4_HOST
+#include <ps4/klog.h>
+#else
 #include <ps5/klog.h>
+#endif
 
 int g_debug_enabled = 1;
 static FILE *g_log_file = NULL;
