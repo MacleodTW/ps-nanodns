@@ -1,16 +1,19 @@
 name: Build and Release
 
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-  
 on:
   push:
-    branches: [main]
-  release:
-    types: [created]
+    paths-ignore:
+      - "**/*.md"
+      - '**/*.txt'
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - '**/*.txt'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}-${{ github.event_name  }}
+  cancel-in-progress: true
 
 jobs:
   payload-build:
