@@ -22,12 +22,6 @@ make PS_HOST=ps4
 make PS_HOST=ps5
 ```
 
-## Deploy
-
-```sh
-make test PS5_HOST=<ps5-ip-or-hostname>
-```
-
 ## Config
 
 At startup the payload uses the directory `/data/nanodns`.
