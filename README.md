@@ -34,9 +34,7 @@ log=/data/nanodns/nanodns.log
 debug=0
 
 [upstream]
-server=1.1.1.1
 server=8.8.8.8
-server=77.77.88.88
 timeout_ms=1500
 
 [overrides]
