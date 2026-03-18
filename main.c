@@ -14,7 +14,12 @@
 #include <ps5/kernel.h>
 #endif
 
+#ifdef PS4_HOST
+#define PRIVILEGED_AUTHID 0x3801000000000013L
+#else
 #define PRIVILEGED_AUTHID 0x4801000000000013L
+#endif
+
 
 volatile sig_atomic_t g_running = 1;
 static int g_libnet_mem_id = -1;
@@ -31,10 +36,8 @@ static void on_signal(int signo) {
 
 // === Network and System Environment Initialization ===
 static int elevate_privileges(void) {
-#ifndef PS4_HOST
   pid_t pid = getpid();
   if(kernel_set_ucred_authid(pid, PRIVILEGED_AUTHID) != 0) return -1;
-#endif
   return 0;
 }
 
