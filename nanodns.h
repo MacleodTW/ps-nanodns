@@ -8,9 +8,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <pthread.h>
 
 #define APP_NAME "PS-NanoDNS"
-#define APP_VERSION "1.4"
+#define APP_VERSION "1.5"
 #define APP_COPYRIGHT "(c) drakmor modified by macleod"
 
 #define DATA_DIR "/data/nanodns"
@@ -59,6 +60,7 @@ typedef struct {
 
 extern volatile sig_atomic_t g_running;
 extern int g_debug_enabled;
+extern pthread_rwlock_t g_cfg_lock;
 
 // === utils.c (Utilities and Logging) ===
 int logger_init(const app_config_t *cfg);

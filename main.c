@@ -7,6 +7,7 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
 
 #ifdef PS4_HOST
 #include <ps4/kernel.h>
@@ -20,8 +21,8 @@
 #define PRIVILEGED_AUTHID 0x4801000000000013L
 #endif
 
-
 volatile sig_atomic_t g_running = 1;
+pthread_rwlock_t g_cfg_lock = PTHREAD_RWLOCK_INITIALIZER;
 static int g_libnet_mem_id = -1;
 
 int sceNetInit(void);
@@ -36,7 +37,19 @@ static void on_signal(int signo) {
 
 // === Network and System Environment Initialization ===
 static int elevate_privileges(void) {
+  unsigned char caps[16] = { 0 };
   pid_t pid = getpid();
+  if(kernel_set_proc_rootdir(pid, KERNEL_ADDRESS_ROOTVNODE)) return -1;
+  if(kernel_set_proc_jaildir(pid, KERNEL_ADDRESS_ROOTVNODE)) return -1;
+#ifdef PS4_HOST  
+  if(kernel_set_ucred_prison(pid, KERNEL_ADDRESS_PRISON0)) return -1;
+#endif
+  if(kernel_set_ucred_uid(pid, 0)) return -1;
+  if(kernel_get_ucred_caps(pid, caps)) return -1;
+  caps[5] = 0x1c;   // ??
+  caps[7] = 0x40;   // jail related?
+  caps[15] |= 0x40; // jitshm
+  if(kernel_set_ucred_caps(pid, caps)) return -1;
   if(kernel_set_ucred_authid(pid, PRIVILEGED_AUTHID) != 0) return -1;
   return 0;
 }
@@ -83,16 +96,53 @@ static int setup_tcp_socket(int port) {
   return fd;
 }
 
+// === Worker Threads ===
+typedef struct {
+  int fd;
+  app_config_t *cfg;
+} thread_args_t;
+
+static void *dns_worker(void *arg) {
+  thread_args_t *args = (thread_args_t *)arg;
+  struct pollfd pfd;
+  pfd.fd = args->fd;
+  pfd.events = POLLIN;
+
+  while (g_running) {
+    if (poll(&pfd, 1, 1000) > 0) {
+      if (pfd.revents & POLLIN) {
+        dns_process_request(args->fd, args->cfg);
+      }
+    }
+  }
+  return NULL;
+}
+
+static void *web_worker(void *arg) {
+  thread_args_t *args = (thread_args_t *)arg;
+  struct pollfd pfd;
+  pfd.fd = args->fd;
+  pfd.events = POLLIN;
+
+  while (g_running) {
+    if (poll(&pfd, 1, 1000) > 0) {
+      if (pfd.revents & POLLIN) {
+        web_process_request(args->fd, args->cfg);
+      }
+    }
+  }
+  return NULL;
+}
+
 // === Main Program ===
 int main(void) {
   app_config_t cfg;
   int dns_fd = -1, web_fd = -1;
-  struct pollfd pfds[2];
+  pthread_t dns_thread, web_thread;
 
   (void)syscall(SYS_thr_set_name, -1, "nanodns.elf");
   
   // Use sigaction instead of signal to avoid SA_RESTART
-  // This ensures blocking calls (like poll, recv) are interrupted on exit
   struct sigaction sa;
   memset(&sa, 0, sizeof(sa));
   sa.sa_handler = on_signal;
@@ -141,21 +191,19 @@ int main(void) {
 
   log_printf("[nanodns] Started DNS on :%d, Web on :%d\n", DNS_PORT, cfg.web_port);
 
-  pfds[0].fd = dns_fd; pfds[0].events = POLLIN;
-  pfds[1].fd = web_fd; pfds[1].events = POLLIN;
+  thread_args_t dns_args = { dns_fd, &cfg };
+  thread_args_t web_args = { web_fd, &cfg };
 
-  while(g_running) {
-    if(poll(pfds, 2, 1000) <= 0) continue;
-    
-    if(pfds[0].revents & POLLIN) {
-      dns_process_request(dns_fd, &cfg);
-    }
-    if(pfds[1].revents & POLLIN) {
-      web_process_request(web_fd, &cfg);
-    }
-  }
+  // Create worker threads
+  pthread_create(&dns_thread, NULL, dns_worker, &dns_args);
+  pthread_create(&web_thread, NULL, web_worker, &web_args);
+
+  // Wait for termination
+  pthread_join(dns_thread, NULL);
+  pthread_join(web_thread, NULL);
 
   log_printf("[nanodns] shutting down\n");
+  pthread_rwlock_destroy(&g_cfg_lock);
   close(dns_fd);
   close(web_fd);
   net_fini();

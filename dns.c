@@ -5,6 +5,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <pthread.h>
 
 typedef struct {
   uint16_t id;
@@ -251,22 +252,23 @@ static void log_dns_response(const uint8_t *packet, size_t packet_len, const cha
   }
 }
 
-static int forward_query_to_upstream(const app_config_t *cfg, const uint8_t *request,
-                                     size_t request_len, uint16_t request_id,
+// Updated forward_query to receive upstreams directly to avoid global config lock
+static int forward_query_to_upstream(const upstream_t *upstreams, size_t upstream_count, int timeout_ms, 
+                                     const uint8_t *request, size_t request_len, uint16_t request_id,
                                      uint8_t *response, size_t response_cap,
                                      size_t *response_len, char *via, size_t via_len) {
   struct { int fd; const upstream_t *upstream; } active[MAX_UPSTREAMS];
   struct pollfd pfds[MAX_UPSTREAMS];
   size_t active_count = 0;
-  int64_t deadline_ms = now_ms() + cfg->timeout_ms;
+  int64_t deadline_ms = now_ms() + timeout_ms;
 
-  for(size_t i = 0; i < cfg->upstream_count; ++i) {
+  for(size_t i = 0; i < upstream_count; ++i) {
     struct sockaddr_in upstream_addr;
     int fd;
     memset(&upstream_addr, 0, sizeof(upstream_addr));
     upstream_addr.sin_family = AF_INET;
     upstream_addr.sin_port = htons(DNS_PORT);
-    upstream_addr.sin_addr = cfg->upstreams[i].addr;
+    upstream_addr.sin_addr = upstreams[i].addr;
     fd = socket(AF_INET, SOCK_DGRAM, 0);
     if(fd < 0) continue;
     if(connect(fd, (struct sockaddr *)&upstream_addr, sizeof(upstream_addr)) != 0 ||
@@ -275,7 +277,7 @@ static int forward_query_to_upstream(const app_config_t *cfg, const uint8_t *req
       continue;
     }
     active[active_count].fd = fd;
-    active[active_count].upstream = &cfg->upstreams[i];
+    active[active_count].upstream = &upstreams[i];
     pfds[active_count].fd = fd;
     pfds[active_count].events = POLLIN;
     pfds[active_count].revents = 0;
@@ -285,9 +287,9 @@ static int forward_query_to_upstream(const app_config_t *cfg, const uint8_t *req
   if(active_count == 0) return -1;
 
   while(active_count > 0) {
-    int64_t timeout_ms = deadline_ms - now_ms();
-    if(timeout_ms < 0) timeout_ms = 0;
-    if(poll(pfds, active_count, (int)timeout_ms) <= 0) break;
+    int64_t remaining_ms = deadline_ms - now_ms();
+    if(remaining_ms < 0) remaining_ms = 0;
+    if(poll(pfds, active_count, (int)remaining_ms) <= 0) break;
 
     for(size_t idx = 0; idx < active_count; ++idx) {
       if(pfds[idx].revents & POLLIN) {
@@ -324,37 +326,59 @@ void dns_process_request(int server_fd, const app_config_t *cfg) {
   if(dns_parse_question(request, (size_t)received, &question) != 0) return;
   log_dns_query(&question, &client_addr);
 
-  if(question.qdcount == 1 && question.qclass == 1) {
-    const override_rule_t *rule = NULL;
-    if(!has_matching_exception(cfg, question.qname)) {
-      rule = find_matching_rule(cfg, question.qname);
-    }
-    if(rule != NULL) {
-      size_t response_len;
-      int build_rc;
-      const char *response_via;
-      if(question.qtype == 1 || question.qtype == 255) {
-        build_rc = build_override_response(request, &question, &rule->addr,
-                                           response, sizeof(response), &response_len);
-        response_via = "override";
-      } else {
-        build_rc = build_nodata_response(request, (size_t)received, &question,
+  // 1. Acquire read lock before matching rules
+  pthread_rwlock_rdlock(&g_cfg_lock);
+
+  const override_rule_t *rule = NULL;
+  if(!has_matching_exception(cfg, question.qname)) {
+    rule = find_matching_rule(cfg, question.qname);
+  }
+
+  // 2. Safely copy data needed for downstream network operations
+  struct in_addr target_ip;
+  int is_override = 0;
+  if(rule != NULL) {
+    target_ip = rule->addr;
+    is_override = 1;
+  }
+
+  upstream_t local_upstreams[MAX_UPSTREAMS];
+  size_t local_upstream_count = cfg->upstream_count;
+  int local_timeout = cfg->timeout_ms;
+  for(size_t i = 0; i < local_upstream_count; ++i) {
+    local_upstreams[i] = cfg->upstreams[i];
+  }
+
+  // 3. Release read lock immediately after copying
+  pthread_rwlock_unlock(&g_cfg_lock);
+
+  if(question.qdcount == 1 && question.qclass == 1 && is_override) {
+    size_t response_len;
+    int build_rc;
+    const char *response_via;
+    if(question.qtype == 1 || question.qtype == 255) {
+      build_rc = build_override_response(request, &question, &target_ip,
                                          response, sizeof(response), &response_len);
-        response_via = "override-nodata";
+      response_via = "override";
+    } else {
+      build_rc = build_nodata_response(request, (size_t)received, &question,
+                                       response, sizeof(response), &response_len);
+      response_via = "override-nodata";
+    }
+    if(build_rc == 0) {
+      if(sendto(server_fd, response, response_len, 0, (struct sockaddr *)&client_addr, client_len) >= 0) {
+        log_dns_response(response, response_len, response_via);
       }
-      if(build_rc == 0) {
-        if(sendto(server_fd, response, response_len, 0, (struct sockaddr *)&client_addr, client_len) >= 0) {
-          log_dns_response(response, response_len, response_via);
-        }
-        return;
-      }
+      return;
     }
   }
 
   {
     size_t response_len = 0;
     char via[INET_ADDRSTRLEN];
-    if(forward_query_to_upstream(cfg, request, (size_t)received, question.id,
+    // Use local copies for upstream requests to prevent locking
+    if(forward_query_to_upstream(local_upstreams, local_upstream_count, local_timeout, 
+                                 request, (size_t)received, question.id,
                                  response, sizeof(response), &response_len, via, sizeof(via)) == 0) {
       if(sendto(server_fd, response, response_len, 0, (struct sockaddr *)&client_addr, client_len) >= 0) {
         log_dns_response(response, response_len, via);

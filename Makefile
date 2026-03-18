@@ -23,7 +23,7 @@ SRCS := main.c dns.c web.c cfg.c utils.c fnmatch.c
 OBJS := $(SRCS:.c=.o)
 
 CFLAGS += -Wall -Werror -O2 -g -std=c11
-LDLIBS := -lSceNet
+LDLIBS := -lSceNet -lpthread
 
 all: $(ELF)
 

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <pthread.h>
 
 // URL Decoder
 static void url_decode(char *dst, const char *src) {
@@ -39,8 +40,7 @@ void web_process_request(int listen_fd, app_config_t *cfg) {
   client_fd = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
   if (client_fd < 0) return;
 
-  // Add: Set receive timeout to 2 seconds
-  // Prevents the thread from hanging indefinitely if a client connects but sends no data
+  // Set receive timeout to 2 seconds to prevent hanging
   struct timeval tv;
   tv.tv_sec = 2;
   tv.tv_usec = 0;
@@ -61,7 +61,10 @@ void web_process_request(int listen_fd, app_config_t *cfg) {
     if (body) {
       body += 4;
       
-      // Handle updating general settings (Debug, Timeout, Web Port, Upstreams)
+      // Acquire write lock before making any changes to config
+      pthread_rwlock_wrlock(&g_cfg_lock);
+      
+      // Handle updating general settings
       if (strncmp(buf, "POST /update_settings", 21) == 0) {
         char *dbg_str = strstr(body, "debug=");
         char *to_str = strstr(body, "timeout=");
@@ -162,6 +165,9 @@ void web_process_request(int listen_fd, app_config_t *cfg) {
         }
         redirect = true;
       }
+
+      // Release write lock
+      pthread_rwlock_unlock(&g_cfg_lock);
     }
   }
 
@@ -174,6 +180,9 @@ void web_process_request(int listen_fd, app_config_t *cfg) {
   else {
     char *html = malloc(32768);
     if (html) {
+      // Acquire read lock for rendering dynamic data
+      pthread_rwlock_rdlock(&g_cfg_lock);
+
       int offset = snprintf(html, 32768,
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
@@ -255,6 +264,9 @@ void web_process_request(int listen_fd, app_config_t *cfg) {
         "<input type='submit' value='Add Rule'></form></div>");
 
       snprintf(html + offset, 32768 - offset, "</body></html>");
+
+      // Release read lock
+      pthread_rwlock_unlock(&g_cfg_lock);
 
       send(client_fd, html, strlen(html), 0);
       free(html);
