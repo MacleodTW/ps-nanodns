@@ -37,19 +37,7 @@ static void on_signal(int signo) {
 
 // === Network and System Environment Initialization ===
 static int elevate_privileges(void) {
-  unsigned char caps[16] = { 0 };
   pid_t pid = getpid();
-  if(kernel_set_proc_rootdir(pid, KERNEL_ADDRESS_ROOTVNODE)) return -1;
-  if(kernel_set_proc_jaildir(pid, KERNEL_ADDRESS_ROOTVNODE)) return -1;
-#ifdef PS4_HOST  
-  if(kernel_set_ucred_prison(pid, KERNEL_ADDRESS_PRISON0)) return -1;
-#endif
-  if(kernel_set_ucred_uid(pid, 0)) return -1;
-  if(kernel_get_ucred_caps(pid, caps)) return -1;
-  caps[5] = 0x1c;   // ??
-  caps[7] = 0x40;   // jail related?
-  caps[15] |= 0x40; // jitshm
-  if(kernel_set_ucred_caps(pid, caps)) return -1;
   if(kernel_set_ucred_authid(pid, PRIVILEGED_AUTHID) != 0) return -1;
   return 0;
 }

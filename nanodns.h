@@ -11,7 +11,7 @@
 #include <pthread.h>
 
 #define APP_NAME "PS-NanoDNS"
-#define APP_VERSION "1.5"
+#define APP_VERSION "1.4"
 #define APP_COPYRIGHT "(c) drakmor modified by macleod"
 
 #define DATA_DIR "/data/nanodns"
